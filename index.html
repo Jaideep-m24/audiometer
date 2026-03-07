@@ -3,188 +3,165 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IoT Audiometry System</title>
+    <title>Audiometry Test Portal</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .nav-btn { @apply px-4 py-2 rounded transition; }
+        .active-view { display: block !important; }
+    </style>
 </head>
-<body class="bg-slate-50 min-h-screen">
+<body class="bg-gray-50 font-sans">
 
-    <nav class="bg-blue-600 text-white shadow-lg p-4 mb-6">
-        <div class="max-w-4xl mx-auto flex justify-between items-center">
-            <h1 class="font-bold text-xl">Audiometry Portal</h1>
-            <div class="space-x-4">
-                <button onclick="showView('test')" class="hover:underline">Patient Test</button>
-                <button onclick="showView('dashboard')" class="hover:underline">Doctor Dashboard</button>
+    <nav class="bg-slate-900 text-white p-4 shadow-md">
+        <div class="max-w-5xl mx-auto flex justify-between items-center">
+            <span class="text-xl font-bold tracking-tight">AUDIOLAB v1.0</span>
+            <div class="space-x-2">
+                <button onclick="switchView('test')" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-sm">Patient Test</button>
+                <button onclick="switchView('doctor')" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded text-sm">Doctor Login</button>
             </div>
         </div>
     </nav>
 
-    <main class="max-w-4xl mx-auto p-4">
-
-        <div id="view-test" class="view-content">
-            <div id="setup-section" class="bg-white p-8 rounded-xl shadow-sm border">
-                <h2 class="text-2xl font-semibold mb-4">New Hearing Test</h2>
-                <input type="text" id="patient-id" placeholder="Enter Patient ID (e.g. P101)" class="w-full p-3 border rounded-lg mb-4 focus:ring-2 focus:ring-blue-500 outline-none">
-                <button onclick="startTest()" class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition">Begin Test</button>
+    <div class="max-w-4xl mx-auto mt-10 p-4">
+        
+        <section id="view-test" class="view-content">
+            <div id="test-start" class="bg-white p-8 rounded-2xl shadow-sm border text-center">
+                <h2 class="text-3xl font-bold mb-6">Hearing Evaluation</h2>
+                <input type="text" id="p-name" placeholder="Enter Full Name" class="w-full max-w-md p-4 border-2 rounded-xl mb-6 text-lg focus:border-blue-500 outline-none">
+                <button onclick="begin()" class="block mx-auto bg-blue-600 text-white px-10 py-4 rounded-xl font-bold text-xl hover:scale-105 transition-transform">Start Test Now</button>
             </div>
 
-            <div id="test-phase" class="hidden bg-white p-8 rounded-xl shadow-sm border text-center">
-                <p class="text-gray-500 mb-2">Testing Frequency</p>
-                <div class="text-6xl font-black text-blue-600 mb-8"><span id="display-freq">250</span><span class="text-2xl">Hz</span></div>
+            <div id="test-running" class="hidden bg-white p-10 rounded-2xl shadow-sm border text-center">
+                <p class="text-gray-400 uppercase tracking-widest font-semibold mb-2">Test Frequency</p>
+                <h1 class="text-7xl font-black text-slate-800 mb-10"><span id="freq-display">250</span><span class="text-3xl text-gray-400">Hz</span></h1>
                 
-                <p class="text-lg mb-6 text-gray-700">Can the patient hear the tone?</p>
-                <div class="flex gap-4 justify-center">
-                    <button onclick="recordStep(true)" class="bg-green-500 text-white px-10 py-4 rounded-xl font-bold text-xl hover:bg-green-600 shadow-md">YES</button>
-                    <button onclick="recordStep(false)" class="bg-red-500 text-white px-10 py-4 rounded-xl font-bold text-xl hover:bg-red-600 shadow-md">NO</button>
+                <p class="text-xl text-gray-600 mb-8 font-medium">Click "YES" the moment you hear a tone.</p>
+                <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                    <button onclick="submitResponse(true)" class="bg-emerald-500 text-white px-12 py-5 rounded-2xl font-bold text-2xl hover:bg-emerald-600">YES, I HEAR IT</button>
+                    <button onclick="submitResponse(false)" class="bg-rose-500 text-white px-12 py-5 rounded-2xl font-bold text-2xl hover:bg-rose-600">NO, I DON'T</button>
                 </div>
             </div>
 
-            <div id="completion-screen" class="hidden bg-white p-8 rounded-xl shadow-sm border text-center">
-                <div class="text-green-500 text-5xl mb-4">✓</div>
-                <h2 class="text-2xl font-bold mb-2">Test Complete</h2>
-                <p class="text-gray-600 mb-6">Data has been synced to the secure database.</p>
-                <button onclick="location.reload()" class="bg-blue-100 text-blue-700 px-6 py-2 rounded-lg">Start Another</button>
+            <div id="test-end" class="hidden bg-white p-10 rounded-2xl shadow-sm border text-center">
+                <div class="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6 text-4xl">✓</div>
+                <h2 class="text-2xl font-bold mb-2">Submission Successful</h2>
+                <p class="text-gray-500 mb-8">Your results have been sent to your doctor.</p>
+                <button onclick="location.reload()" class="text-blue-600 font-semibold underline">Reset Page</button>
             </div>
-        </div>
+        </section>
 
-        <div id="view-dashboard" class="view-content hidden">
-            <div class="bg-white p-6 rounded-xl shadow-sm border">
-                <h2 class="text-2xl font-bold mb-6 text-gray-800">Results Analysis</h2>
-                
-                <div class="mb-10">
-                    <canvas id="audiogramChart" height="150"></canvas>
+        <section id="view-doctor" class="view-content hidden">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border">
+                <div class="flex justify-between items-center mb-8">
+                    <h2 class="text-2xl font-bold">Patient Records</h2>
+                    <button onclick="fetchRecords()" class="text-blue-600 text-sm font-bold">REFRESH DATA</button>
                 </div>
 
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left">
-                        <thead>
-                            <tr class="border-b text-gray-400 uppercase text-xs">
-                                <th class="pb-3">Patient ID</th>
-                                <th class="pb-3 text-center">250Hz</th>
-                                <th class="pb-3 text-center">500Hz</th>
-                                <th class="pb-3 text-center">1000Hz</th>
-                                <th class="pb-3 text-center">2000Hz</th>
-                                <th class="pb-3 text-center">4000Hz</th>
-                                <th class="pb-3 text-center">8000Hz</th>
-                            </tr>
-                        </thead>
-                        <tbody id="results-table-body" class="text-gray-700">
-                            </tbody>
-                    </table>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="md:col-span-1 border-r pr-4 max-h-[500px] overflow-y-auto" id="patient-list">
+                        <p class="text-gray-400 text-sm">Loading records...</p>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <div id="chart-placeholder" class="h-full flex items-center justify-center bg-gray-50 rounded-xl text-gray-400 italic">
+                            Select a patient to view Audiogram
+                        </div>
+                        <canvas id="audiogramCanvas" class="hidden"></canvas>
+                    </div>
                 </div>
             </div>
-        </div>
+        </section>
 
-    </main>
+    </div>
 
     <script>
-        // CONFIGURATION
-        const G_SCRIPT_URL = "YOUR_APPS_SCRIPT_URL"; // Replace this!
-        const frequencies = [250, 500, 1000, 2000, 4000, 8000];
-        
-        // APP STATE
-        let currentIndex = 0;
-        let testData = [];
-        let currentPatient = "";
-        let myChart = null;
+        // --- CONFIGURATION ---
+        const SCRIPT_URL = "YOUR_GOOGLE_APPS_SCRIPT_URL"; 
+        const FREQS = [250, 500, 1000, 2000, 4000, 8000];
 
-        function showView(view) {
-            document.querySelectorAll('.view-content').forEach(v => v.classList.add('hidden'));
+        // --- STATE ---
+        let step = 0;
+        let results = [];
+        let pName = "";
+        let chartInstance = null;
+
+        function switchView(view) {
+            document.querySelectorAll('.view-content').forEach(el => el.classList.add('hidden'));
             document.getElementById(`view-${view}`).classList.remove('hidden');
-            if(view === 'dashboard') loadDashboardData();
+            if(view === 'doctor') fetchRecords();
         }
 
-        // --- TEST LOGIC ---
-        function startTest() {
-            currentPatient = document.getElementById('patient-id').value;
-            if(!currentPatient) return alert("Please enter a Patient ID");
-            
-            document.getElementById('setup-section').classList.add('hidden');
-            document.getElementById('test-phase').classList.remove('hidden');
-            updateESP(frequencies[currentIndex]);
+        // --- TEST PHASE ---
+        function begin() {
+            pName = document.getElementById('p-name').value;
+            if(!pName) return alert("Please enter name");
+            document.getElementById('test-start').classList.add('hidden');
+            document.getElementById('test-running').classList.remove('hidden');
         }
 
-        async function recordStep(heard) {
-            testData.push({ freq: frequencies[currentIndex], heard: heard ? 1 : 0 });
-            
-            if (currentIndex < frequencies.length - 1) {
-                currentIndex++;
-                document.getElementById('display-freq').innerText = frequencies[currentIndex];
-                updateESP(frequencies[currentIndex]);
+        function submitResponse(heard) {
+            results.push({ f: FREQS[step], h: heard ? 1 : 0 });
+            if(step < FREQS.length - 1) {
+                step++;
+                document.getElementById('freq-display').innerText = FREQS[step];
             } else {
-                finishAndSubmit();
+                completeTest();
             }
         }
 
-        async function updateESP(freq) {
-            // Sends current freq to Google Sheet for ESP32 to read
-            fetch(G_SCRIPT_URL, {
-                method: 'POST',
-                mode: 'no-cors',
-                body: JSON.stringify({ action: "SET_FREQ", freq: freq, patient: currentPatient })
-            });
-        }
-
-        async function finishAndSubmit() {
-            document.getElementById('test-phase').classList.add('hidden');
-            document.getElementById('completion-screen').classList.remove('hidden');
-
-            // Send full results to Sheets for permanent storage
-            fetch(G_SCRIPT_URL, {
-                method: 'POST',
-                mode: 'no-cors',
-                body: JSON.stringify({ action: "SAVE_RESULTS", patient: currentPatient, results: testData })
-            });
-        }
-
-        // --- DASHBOARD LOGIC ---
-        async function loadDashboardData() {
-            const response = await fetch(G_SCRIPT_URL + "?action=GET_RESULTS");
-            const allData = await response.json();
+        async function completeTest() {
+            document.getElementById('test-running').classList.add('hidden');
+            document.getElementById('test-end').classList.remove('hidden');
             
-            const tbody = document.getElementById('results-table-body');
-            tbody.innerHTML = "";
-
-            allData.forEach(row => {
-                const tr = document.createElement('tr');
-                tr.className = "border-b hover:bg-gray-50 cursor-pointer";
-                tr.onclick = () => renderAudiogram(row);
-                
-                let cells = `<td class="py-4 font-medium text-blue-600">${row.id}</td>`;
-                row.scores.forEach(s => {
-                    cells += `<td class="text-center">${s === 1 ? '✅' : '❌'}</td>`;
-                });
-                tr.innerHTML = cells;
-                tbody.appendChild(tr);
+            // Format: [Name, 250Hz_val, 500Hz_val, ...]
+            const payload = [pName, ...results.map(r => r.h)];
+            
+            await fetch(SCRIPT_URL, {
+                method: "POST",
+                mode: "no-cors",
+                body: JSON.stringify(payload)
             });
         }
 
-        function renderAudiogram(patientRow) {
-            const ctx = document.getElementById('audiogramChart').getContext('2d');
-            if(myChart) myChart.destroy();
+        // --- DOCTOR PHASE ---
+        async function fetchRecords() {
+            const listDiv = document.getElementById('patient-list');
+            try {
+                const res = await fetch(SCRIPT_URL);
+                const data = await res.json();
+                listDiv.innerHTML = "";
+                data.forEach((entry, idx) => {
+                    const btn = document.createElement('button');
+                    btn.className = "w-full text-left p-3 mb-2 rounded hover:bg-blue-50 border-b transition text-sm font-medium";
+                    btn.innerText = `${entry.name} (${entry.date})`;
+                    btn.onclick = () => drawChart(entry);
+                    listDiv.appendChild(btn);
+                });
+            } catch (e) { listDiv.innerHTML = "Error loading data."; }
+        }
 
-            myChart = new Chart(ctx, {
+        function drawChart(entry) {
+            document.getElementById('chart-placeholder').classList.add('hidden');
+            const canvas = document.getElementById('audiogramCanvas');
+            canvas.classList.remove('hidden');
+
+            if(chartInstance) chartInstance.destroy();
+            chartInstance = new Chart(canvas, {
                 type: 'line',
                 data: {
-                    labels: frequencies.map(f => f + 'Hz'),
+                    labels: FREQS.map(f => f + 'Hz'),
                     datasets: [{
-                        label: `Hearing Profile: ${patientRow.id}`,
-                        data: patientRow.scores,
+                        label: 'Hearing Response (1=Heard, 0=Not)',
+                        data: entry.scores,
                         borderColor: '#2563eb',
-                        backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                        pointRadius: 6,
-                        fill: true,
-                        tension: 0.3
+                        pointBackgroundColor: '#2563eb',
+                        tension: 0.2,
+                        fill: false
                     }]
                 },
                 options: {
-                    scales: {
-                        y: { 
-                            min: 0, 
-                            max: 1.2,
-                            ticks: { callback: (val) => val === 1 ? "Heard" : (val === 0 ? "Not Heard" : "") }
-                        }
-                    }
+                    scales: { y: { min: -0.2, max: 1.2, ticks: { stepSize: 1 } } }
                 }
             });
         }
