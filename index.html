@@ -1,61 +1,160 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Audiometry Screening Dashboard</title>
+    <meta charset="UTF-8">
+    <title>Professional Audiometry Screening</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
-        body { font-family: sans-serif; background: #f4f4f4; display: flex; flex-direction: column; align-items: center; }
-        .container { width: 80%; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h2 { color: #00796b; border-bottom: 2px solid #00796b; padding-bottom: 10px; }
-        #audiogramCanvas { max-height: 400px; }
+        :root { --primary: #00796b; --bg: #f0f2f5; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); padding: 20px; }
+        #reportArea { max-width: 900px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        
+        header { text-align: center; border-bottom: 2px solid var(--primary); margin-bottom: 25px; padding-bottom: 10px; }
+        h2 { color: var(--primary); margin: 0; text-transform: uppercase; letter-spacing: 1px; }
+        
+        .controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: #e0f2f1; padding: 15px; border-radius: 8px; }
+        select, .btn-download { padding: 8px 15px; border-radius: 5px; border: 1px solid var(--primary); font-size: 1rem; cursor: pointer; }
+        .btn-download { background: var(--primary); color: white; font-weight: bold; transition: 0.3s; }
+        .btn-download:hover { background: #004d40; }
+        .info { font-weight: bold; color: #555; }
+        
+        #audiogramCanvas { background: #fff; border: 1px solid #ddd; border-radius: 4px; }
+        .footer-note { font-size: 0.85rem; color: #777; margin-top: 15px; font-style: italic; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>PURE-TONE AUDIOMETRY SCREENING</h2>
-        <canvas id="audiogramCanvas"></canvas>
+
+<div id="reportArea">
+    <header>
+        <h2>Pure-Tone Audiometry Screening Report</h2>
+    </header>
+
+    <div class="controls">
+        <div>
+            <label for="patientSelect">Patient ID: </label>
+            <select id="patientSelect" onchange="updateDashboard()">
+                <option value="">Loading...</option>
+            </select>
+        </div>
+        <div class="info" id="testTime">Assessment Time: --:--</div>
+        <button class="btn-download" onclick="downloadPDF()">Download PDF</button>
     </div>
 
-    <script>
-        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzI5vIzEjn90ECGDmvBo90URY8wRLEL8BbcNv7eqEs3IyRBecm5MUvgKxuWJJQ265pU/exec?read=true";
+    <canvas id="audiogramCanvas"></canvas>
 
-        async function fetchData() {
+    <div class="footer-note">
+        * Screening Criteria: 20dB HL = Pass (Heard) | 90dB HL = Refer (Not Heard).<br>
+        * Symbols: Red Circle (○) = Right Ear | Blue Cross (X) = Left Ear.
+    </div>
+</div>
+
+<script>
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyCNx9IAEyHXVptCH7MI4b1_4s6-BTLMDTLJFXgZVvf7qWUgdhKpb464uVEgRxpl8MQ/exec?read=true";
+    
+    let allData = [];
+    let chartInstance = null;
+
+    async function init() {
+        try {
             const response = await fetch(SCRIPT_URL);
-            const rawData = await response.json();
+            allData = await response.json();
+            const patients = [...new Set(allData.map(item => item.patient))].sort();
+            const selector = document.getElementById('patientSelect');
+            selector.innerHTML = "";
             
-            // Map "Heard" to 20dB (Normal) and "Not Heard" to 90dB (Failure)
-            const processedData = rawData.map(item => ({
-                x: item.frequency,
-                y: item.status === "Heard" ? 20 : 90
-            }));
-            
-            renderChart(processedData);
+            patients.forEach(pid => {
+                const opt = document.createElement('option');
+                opt.value = pid;
+                opt.textContent = pid;
+                selector.appendChild(opt);
+            });
+            updateDashboard();
+        } catch (e) {
+            console.error("Fetch Error:", e);
+        }
+    }
+
+    function updateDashboard() {
+        const selectedID = document.getElementById('patientSelect').value;
+        const patientData = allData.filter(item => item.patient === selectedID);
+        
+        if (patientData.length > 0) {
+            document.getElementById('testTime').textContent = `Date: ${patientData[0].timestamp || 'N/A'}`;
         }
 
-        function renderChart(points) {
-            const ctx = document.getElementById('audiogramCanvas').getContext('2d');
-            new Chart(ctx, {
-                type: 'line',
-                data: {
-                    datasets: [{
-                        label: 'Right Ear (Screening)',
-                        data: points,
+        const rightEarPoints = patientData
+            .filter(d => d.ear === "Right")
+            .map(d => ({ x: Number(d.frequency), y: d.status === "Heard" ? 20 : 90 }))
+            .sort((a,b) => a.x - b.x);
+
+        const leftEarPoints = patientData
+            .filter(d => d.ear === "Left")
+            .map(d => ({ x: Number(d.frequency), y: d.status === "Heard" ? 20 : 90 }))
+            .sort((a,b) => a.x - b.x);
+
+        renderChart(rightEarPoints, leftEarPoints);
+    }
+
+    function renderChart(rightData, leftData) {
+        const ctx = document.getElementById('audiogramCanvas').getContext('2d');
+        if (chartInstance) chartInstance.destroy();
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                datasets: [
+                    {
+                        label: 'Right Ear',
+                        data: rightData,
                         borderColor: 'red',
-                        backgroundColor: 'red',
                         pointStyle: 'circle',
-                        pointRadius: 8,
+                        pointRadius: 7,
                         showLine: true
-                    }]
-                },
-                options: {
-                    scales: {
-                        x: { type: 'logarithmic', title: { display: true, text: 'Frequency (Hz)' }, min: 125, max: 8000 },
-                        y: { reverse: true, min: 0, max: 100, title: { display: true, text: 'Hearing Level (dB HL)' } }
+                    },
+                    {
+                        label: 'Left Ear',
+                        data: leftData,
+                        borderColor: 'blue',
+                        pointStyle: 'crossRot',
+                        pointRadius: 9,
+                        showLine: true
                     }
+                ]
+            },
+            options: {
+                scales: {
+                    x: { type: 'logarithmic', min: 125, max: 8000, title: { display: true, text: 'Frequency (Hz)' } },
+                    y: { reverse: true, min: 0, max: 100, title: { display: true, text: 'Hearing Level (dB HL)' } }
                 }
-            });
-        }
-        fetchData();
-    </script>
+            }
+        });
+    }
+
+    async function downloadPDF() {
+        const { jsPDF } = window.jspdf;
+        const element = document.getElementById('reportArea');
+        const patientID = document.getElementById('patientSelect').value;
+        
+        // Hide button during capture
+        document.querySelector('.btn-download').style.display = 'none';
+
+        const canvas = await html2canvas(element);
+        const imgData = canvas.toDataURL('image/png');
+        
+        const pdf = new jsPDF('l', 'mm', 'a4');
+        const imgProps = pdf.getImageProperties(imgData);
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+        
+        pdf.addImage(imgData, 'PNG', 0, 10, pdfWidth, pdfHeight);
+        pdf.save(`Audiometry_Report_${patientID}.pdf`);
+
+        // Show button again
+        document.querySelector('.btn-download').style.display = 'block';
+    }
+
+    init();
+</script>
 </body>
 </html>
