@@ -1,170 +1,61 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audiometry Test Portal</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Audiometry Screening Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        .nav-btn { @apply px-4 py-2 rounded transition; }
-        .active-view { display: block !important; }
+        body { font-family: sans-serif; background: #f4f4f4; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 80%; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h2 { color: #00796b; border-bottom: 2px solid #00796b; padding-bottom: 10px; }
+        #audiogramCanvas { max-height: 400px; }
     </style>
 </head>
-<body class="bg-gray-50 font-sans">
-
-    <nav class="bg-slate-900 text-white p-4 shadow-md">
-        <div class="max-w-5xl mx-auto flex justify-between items-center">
-            <span class="text-xl font-bold tracking-tight">AUDIOLAB v1.0</span>
-            <div class="space-x-2">
-                <button onclick="switchView('test')" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-sm">Patient Test</button>
-                <button onclick="switchView('doctor')" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded text-sm">Doctor Login</button>
-            </div>
-        </div>
-    </nav>
-
-    <div class="max-w-4xl mx-auto mt-10 p-4">
-        
-        <section id="view-test" class="view-content">
-            <div id="test-start" class="bg-white p-8 rounded-2xl shadow-sm border text-center">
-                <h2 class="text-3xl font-bold mb-6">Hearing Evaluation</h2>
-                <input type="text" id="p-name" placeholder="Enter Full Name" class="w-full max-w-md p-4 border-2 rounded-xl mb-6 text-lg focus:border-blue-500 outline-none">
-                <button onclick="begin()" class="block mx-auto bg-blue-600 text-white px-10 py-4 rounded-xl font-bold text-xl hover:scale-105 transition-transform">Start Test Now</button>
-            </div>
-
-            <div id="test-running" class="hidden bg-white p-10 rounded-2xl shadow-sm border text-center">
-                <p class="text-gray-400 uppercase tracking-widest font-semibold mb-2">Test Frequency</p>
-                <h1 class="text-7xl font-black text-slate-800 mb-10"><span id="freq-display">250</span><span class="text-3xl text-gray-400">Hz</span></h1>
-                
-                <p class="text-xl text-gray-600 mb-8 font-medium">Click "YES" the moment you hear a tone.</p>
-                <div class="flex flex-col sm:flex-row gap-4 justify-center">
-                    <button onclick="submitResponse(true)" class="bg-emerald-500 text-white px-12 py-5 rounded-2xl font-bold text-2xl hover:bg-emerald-600">YES, I HEAR IT</button>
-                    <button onclick="submitResponse(false)" class="bg-rose-500 text-white px-12 py-5 rounded-2xl font-bold text-2xl hover:bg-rose-600">NO, I DON'T</button>
-                </div>
-            </div>
-
-            <div id="test-end" class="hidden bg-white p-10 rounded-2xl shadow-sm border text-center">
-                <div class="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6 text-4xl">✓</div>
-                <h2 class="text-2xl font-bold mb-2">Submission Successful</h2>
-                <p class="text-gray-500 mb-8">Your results have been sent to your doctor.</p>
-                <button onclick="location.reload()" class="text-blue-600 font-semibold underline">Reset Page</button>
-            </div>
-        </section>
-
-        <section id="view-doctor" class="view-content hidden">
-            <div class="bg-white p-6 rounded-2xl shadow-sm border">
-                <div class="flex justify-between items-center mb-8">
-                    <h2 class="text-2xl font-bold">Patient Records</h2>
-                    <button onclick="fetchRecords()" class="text-blue-600 text-sm font-bold">REFRESH DATA</button>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div class="md:col-span-1 border-r pr-4 max-h-[500px] overflow-y-auto" id="patient-list">
-                        <p class="text-gray-400 text-sm">Loading records...</p>
-                    </div>
-                    
-                    <div class="md:col-span-2">
-                        <div id="chart-placeholder" class="h-full flex items-center justify-center bg-gray-50 rounded-xl text-gray-400 italic">
-                            Select a patient to view Audiogram
-                        </div>
-                        <canvas id="audiogramCanvas" class="hidden"></canvas>
-                    </div>
-                </div>
-            </div>
-        </section>
-
+<body>
+    <div class="container">
+        <h2>PURE-TONE AUDIOMETRY SCREENING</h2>
+        <canvas id="audiogramCanvas"></canvas>
     </div>
 
     <script>
-        // --- CONFIGURATION ---
-        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbypoBoJ9Xmw1ert8CUYsoti2TCSAB-kSfdt0P4fBBlrM-BJ2uLhuOCk6_nemlp3Lt3s/exec"; 
-        const FREQS = [250, 500, 1000, 2000, 4000, 8000];
+        const SCRIPT_URL = "YOUR_APPS_SCRIPT_URL_HERE?read=true";
 
-        // --- STATE ---
-        let step = 0;
-        let results = [];
-        let pName = "";
-        let chartInstance = null;
-
-        function switchView(view) {
-            document.querySelectorAll('.view-content').forEach(el => el.classList.add('hidden'));
-            document.getElementById(`view-${view}`).classList.remove('hidden');
-            if(view === 'doctor') fetchRecords();
-        }
-
-        // --- TEST PHASE ---
-        function begin() {
-            pName = document.getElementById('p-name').value;
-            if(!pName) return alert("Please enter name");
-            document.getElementById('test-start').classList.add('hidden');
-            document.getElementById('test-running').classList.remove('hidden');
-        }
-
-        function submitResponse(heard) {
-            results.push({ f: FREQS[step], h: heard ? 1 : 0 });
-            if(step < FREQS.length - 1) {
-                step++;
-                document.getElementById('freq-display').innerText = FREQS[step];
-            } else {
-                completeTest();
-            }
-        }
-
-        async function completeTest() {
-            document.getElementById('test-running').classList.add('hidden');
-            document.getElementById('test-end').classList.remove('hidden');
+        async function fetchData() {
+            const response = await fetch(SCRIPT_URL);
+            const rawData = await response.json();
             
-            // Format: [Name, 250Hz_val, 500Hz_val, ...]
-            const payload = [pName, ...results.map(r => r.h)];
+            // Map "Heard" to 20dB (Normal) and "Not Heard" to 90dB (Failure)
+            const processedData = rawData.map(item => ({
+                x: item.frequency,
+                y: item.status === "Heard" ? 20 : 90
+            }));
             
-            await fetch(SCRIPT_URL, {
-                method: "POST",
-                mode: "no-cors",
-                body: JSON.stringify(payload)
-            });
+            renderChart(processedData);
         }
 
-        // --- DOCTOR PHASE ---
-        async function fetchRecords() {
-            const listDiv = document.getElementById('patient-list');
-            try {
-                const res = await fetch(SCRIPT_URL);
-                const data = await res.json();
-                listDiv.innerHTML = "";
-                data.forEach((entry, idx) => {
-                    const btn = document.createElement('button');
-                    btn.className = "w-full text-left p-3 mb-2 rounded hover:bg-blue-50 border-b transition text-sm font-medium";
-                    btn.innerText = `${entry.name} (${entry.date})`;
-                    btn.onclick = () => drawChart(entry);
-                    listDiv.appendChild(btn);
-                });
-            } catch (e) { listDiv.innerHTML = "Error loading data."; }
-        }
-
-        function drawChart(entry) {
-            document.getElementById('chart-placeholder').classList.add('hidden');
-            const canvas = document.getElementById('audiogramCanvas');
-            canvas.classList.remove('hidden');
-
-            if(chartInstance) chartInstance.destroy();
-            chartInstance = new Chart(canvas, {
+        function renderChart(points) {
+            const ctx = document.getElementById('audiogramCanvas').getContext('2d');
+            new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: FREQS.map(f => f + 'Hz'),
                     datasets: [{
-                        label: 'Hearing Response (1=Heard, 0=Not)',
-                        data: entry.scores,
-                        borderColor: '#2563eb',
-                        pointBackgroundColor: '#2563eb',
-                        tension: 0.2,
-                        fill: false
+                        label: 'Right Ear (Screening)',
+                        data: points,
+                        borderColor: 'red',
+                        backgroundColor: 'red',
+                        pointStyle: 'circle',
+                        pointRadius: 8,
+                        showLine: true
                     }]
                 },
                 options: {
-                    scales: { y: { min: -0.2, max: 1.2, ticks: { stepSize: 1 } } }
+                    scales: {
+                        x: { type: 'logarithmic', title: { display: true, text: 'Frequency (Hz)' }, min: 125, max: 8000 },
+                        y: { reverse: true, min: 0, max: 100, title: { display: true, text: 'Hearing Level (dB HL)' } }
+                    }
                 }
             });
         }
+        fetchData();
     </script>
 </body>
 </html>
