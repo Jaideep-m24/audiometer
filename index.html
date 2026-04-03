@@ -11,7 +11,6 @@
         :root { --primary: #00796b; --secondary: #004d40; --bg: #f0f2f5; --white: #ffffff; }
         body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 20px; }
         
-        /* Navigation Tabs */
         .tabs { display: flex; justify-content: center; gap: 10px; margin-bottom: 20px; }
         .tab-btn { padding: 12px 25px; border: none; border-radius: 8px; cursor: pointer; background: #cfd8dc; font-weight: bold; transition: 0.3s; }
         .tab-btn.active { background: var(--primary); color: white; box-shadow: 0 4px 10px rgba(0,121,107,0.3); }
@@ -19,35 +18,32 @@
         .container { max-width: 900px; margin: auto; display: none; }
         .container.active { display: block; }
 
-        /* General Styling */
         .card { background: var(--white); padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
         header { text-align: center; border-bottom: 2px solid var(--primary); margin-bottom: 25px; padding-bottom: 10px; }
         h2 { color: var(--primary); margin: 0; text-transform: uppercase; }
 
-        /* Doctor Dashboard Specifics */
         .controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: #e0f2f1; padding: 15px; border-radius: 8px; }
         select, .btn { padding: 10px 18px; border-radius: 6px; border: 1px solid var(--primary); font-size: 1rem; cursor: pointer; transition: 0.2s; }
         .btn-primary { background: var(--primary); color: white; border: none; }
         .btn-primary:hover { background: var(--secondary); }
 
-        /* Patient Interface Specifics */
         .test-zone { text-align: center; padding: 40px 0; }
         .response-btns { display: flex; flex-direction: column; gap: 15px; align-items: center; margin-top: 20px; }
-        .btn-big { width: 100%; max-width: 300px; padding: 25px; font-size: 1.5rem; font-weight: bold; border-radius: 15px; border: none; }
+        .btn-big { width: 100%; max-width: 300px; padding: 25px; font-size: 1.5rem; font-weight: bold; border-radius: 15px; border: none; cursor: pointer; transition: transform 0.1s; }
         .heard { background: #2e7d32; color: white; }
         .not-heard { background: #c62828; color: white; }
-        .heard:active, .not-heard:active { transform: scale(0.95); }
-        #testStatus { margin-top: 20px; color: #546e7a; font-style: italic; }
+        .btn-big:active { transform: scale(0.95); }
+        #testStatus { margin-top: 20px; color: #546e7a; font-style: italic; font-weight: bold; }
 
-        #audiogramCanvas { background: #fff; border: 1px solid #ddd; border-radius: 4px; }
-        .footer-note { font-size: 0.85rem; color: #777; margin-top: 15px; font-style: italic; }
+        #audiogramCanvas { background: #fff; border: 1px solid #ddd; border-radius: 4px; width: 100% !important; height: auto !important; }
+        .footer-note { font-size: 0.85rem; color: #777; margin-top: 15px; font-style: italic; line-height: 1.4; }
     </style>
 </head>
 <body>
 
     <div class="tabs">
-        <button class="tab-btn active" onclick="switchTab('doctor')">Doctor Dashboard</button>
-        <button class="tab-btn" onclick="switchTab('patient')">Patient Test Room</button>
+        <button class="tab-btn active" id="btn-doctor" onclick="switchTab('doctor')">Doctor Dashboard</button>
+        <button class="tab-btn" id="btn-patient" onclick="switchTab('patient')">Patient Test Room</button>
     </div>
 
     <div id="doctor" class="container active">
@@ -59,16 +55,16 @@
                 <div>
                     <label for="patientSelect">Select Patient: </label>
                     <select id="patientSelect" onchange="updateDashboard()">
-                        <option value="">Loading Patients...</option>
+                        <option value="">Fetching Data...</option>
                     </select>
                 </div>
-                <div class="info" id="testTime" style="font-weight: bold;">Date: --:--</div>
+                <div id="testTime" style="font-weight: bold;">Date: --:--</div>
                 <button class="btn btn-primary" onclick="downloadPDF()">Download PDF</button>
             </div>
             <canvas id="audiogramCanvas"></canvas>
             <div class="footer-note">
-                * Right Ear: Red Circle (○) | Left Ear: Blue Cross (X)<br>
-                * Threshold: 20dB (Heard) / 90dB (Not Heard)
+                • <b>Right Ear:</b> Red Circle (○) | <b>Left Ear:</b> Blue Cross (X)<br>
+                • <b>Y-Axis:</b> Lower numbers (top) indicate better hearing. Higher numbers (bottom) indicate hearing loss.
             </div>
         </div>
     </div>
@@ -79,114 +75,171 @@
                 <h2>Hearing Test Interface</h2>
             </header>
             <div class="test-zone">
-                <p style="font-size: 1.2rem; color: #37474f;">Please press the button below as soon as you hear a tone in your ear.</p>
+                <p style="font-size: 1.2rem; color: #37474f;">Please press the button below <b>only</b> when you hear a tone.</p>
                 
                 <div class="response-btns">
                     <button class="btn-big heard" onclick="submitResponse('Heard')">I HEARD IT</button>
                     <button class="btn-big not-heard" onclick="submitResponse('Not_Heard')">NOT HEARD</button>
                 </div>
                 
-                <div id="testStatus">Ready to begin. Wait for the signal...</div>
+                <div id="testStatus">Ready. Please put on your headphones.</div>
             </div>
         </div>
     </div>
 
 <script>
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzr0fLJLBCitIMONnu8FOWjXCzscbyROJUvsIMnWnk-PDWHvDrxzCbEhOuegnGreHSO/exec";
+    // CRITICAL: Replace this with your exact Web App URL from Apps Script Deployment
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby2HXHwRWdESL_NDLH8AdwEeroAgLuhJBTo0nGsLZ75W0jHA_VbF5keuEqNIzQm9Z57/exec";
     
     let allData = [];
     let chartInstance = null;
 
-    // --- TAB SYSTEM ---
     function switchTab(tabId) {
         document.querySelectorAll('.container').forEach(c => c.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        
         document.getElementById(tabId).classList.add('active');
-        event.currentTarget.classList.add('active');
-        if(tabId === 'doctor') init(); // Refresh data when opening dashboard
+        document.getElementById('btn-' + tabId).classList.add('active');
+        
+        if(tabId === 'doctor') init(); 
     }
 
-    // --- DOCTOR LOGIC ---
+    // Load data from Google Sheet
     async function init() {
         try {
             const response = await fetch(`${SCRIPT_URL}?read=true`);
-            allData = await response.json();
-            const patients = [...new Set(allData.map(item => item.patient))].sort();
-            const selector = document.getElementById('patientSelect');
-            selector.innerHTML = "";
+            const data = await response.json();
             
+            if (!Array.isArray(data)) {
+                console.error("Invalid data format received");
+                return;
+            }
+
+            allData = data;
+            const patients = [...new Set(allData.map(item => item.patient))].sort().reverse();
+            const selector = document.getElementById('patientSelect');
+            
+            selector.innerHTML = "";
+            if (patients.length === 0) {
+                selector.innerHTML = "<option>No data found</option>";
+                return;
+            }
+
             patients.forEach(pid => {
                 const opt = document.createElement('option');
                 opt.value = pid; opt.textContent = pid;
                 selector.appendChild(opt);
             });
+            
             updateDashboard();
-        } catch (e) { console.error("Fetch Error:", e); }
+        } catch (e) { 
+            console.error("Fetch Error:", e);
+            document.getElementById('patientSelect').innerHTML = "<option>Error Loading</option>";
+        }
     }
 
     function updateDashboard() {
         const selectedID = document.getElementById('patientSelect').value;
         const patientData = allData.filter(item => item.patient === selectedID);
+        
         if (patientData.length > 0) {
-            document.getElementById('testTime').textContent = `Date: ${patientData[0].timestamp || 'N/A'}`;
+            document.getElementById('testTime').textContent = `Date: ${patientData[0].timestamp}`;
         }
-        const rightData = patientData.filter(d => d.ear === "Right").map(d => ({ x: Number(d.frequency), y: d.status === "Heard" ? 20 : 90 })).sort((a,b)=>a.x-b.x);
-        const leftData = patientData.filter(d => d.ear === "Left").map(d => ({ x: Number(d.frequency), y: d.status === "Heard" ? 20 : 90 })).sort((a,b)=>a.x-b.x);
-        renderChart(rightData, leftData);
+
+        // Logic: Heard = 20dB (Normal), Not_Heard = 90dB (Severe Loss)
+        const formatPoints = (ear) => {
+            return patientData
+                .filter(d => d.ear === ear)
+                .map(d => ({ x: d.frequency.toString(), y: d.status === "Heard" ? 20 : 90 }))
+                .sort((a, b) => parseInt(a.x) - parseInt(b.x));
+        };
+
+        renderChart(formatPoints("Right"), formatPoints("Left"));
     }
 
     function renderChart(right, left) {
         const ctx = document.getElementById('audiogramCanvas').getContext('2d');
         if (chartInstance) chartInstance.destroy();
+        
         chartInstance = new Chart(ctx, {
             type: 'line',
             data: {
                 datasets: [
-                    { label: 'Right Ear', data: right, borderColor: 'red', pointStyle: 'circle', pointRadius: 7, showLine: true },
-                    { label: 'Left Ear', data: left, borderColor: 'blue', pointStyle: 'crossRot', pointRadius: 9, showLine: true }
+                    { 
+                        label: 'Right Ear (○)', 
+                        data: right, 
+                        borderColor: 'red', 
+                        backgroundColor: 'red',
+                        pointStyle: 'circle', 
+                        pointRadius: 7, 
+                        borderWidth: 2,
+                        showLine: true 
+                    },
+                    { 
+                        label: 'Left Ear (X)', 
+                        data: left, 
+                        borderColor: 'blue', 
+                        backgroundColor: 'blue',
+                        pointStyle: 'crossRot', 
+                        pointRadius: 9, 
+                        borderWidth: 2,
+                        showLine: true 
+                    }
                 ]
             },
             options: {
+                responsive: true,
                 scales: {
-                    x: { type: 'logarithmic', min: 125, max: 8000, title: { display: true, text: 'Frequency (Hz)' } },
-                    y: { reverse: true, min: 0, max: 100, title: { display: true, text: 'Hearing Level (dB HL)' } }
+                    x: {
+                        type: 'category',
+                        labels: ['250', '500', '1000', '2000', '4000', '8000'],
+                        title: { display: true, text: 'Frequency (Hz)', font: { weight: 'bold' } }
+                    },
+                    y: {
+                        reverse: true,
+                        min: 0,
+                        max: 100,
+                        ticks: { stepSize: 10 },
+                        title: { display: true, text: 'Hearing Level (dB HL)', font: { weight: 'bold' } }
+                    }
                 }
             }
         });
     }
 
-    // --- PATIENT LOGIC ---
+    // Patient click response
     async function submitResponse(status) {
         const statusEl = document.getElementById('testStatus');
-        statusEl.innerText = "Recording your response...";
+        statusEl.innerText = "Sending response...";
         statusEl.style.color = "#00796b";
         
         try {
+            // Using no-cors is usually not needed if Apps Script is set to "Anyone"
             await fetch(`${SCRIPT_URL}?action=patientResponse&status=${status}`);
-            statusEl.innerText = "Response saved! The next tone will play shortly...";
+            statusEl.innerText = "Response recorded. Wait for next tone...";
             setTimeout(() => { statusEl.innerText = "Listening..."; }, 2000);
         } catch (e) {
-            statusEl.innerText = "Error saving response. Please check internet.";
+            statusEl.innerText = "Connection error. Try again.";
             statusEl.style.color = "red";
         }
     }
 
-    // --- EXPORT LOGIC ---
     async function downloadPDF() {
         const { jsPDF } = window.jspdf;
         const element = document.getElementById('reportArea');
         const patientID = document.getElementById('patientSelect').value;
         const btn = document.querySelector('.btn-primary');
         
-        btn.style.visibility = 'hidden';
+        btn.style.display = 'none'; // Hide button in PDF
         const canvas = await html2canvas(element);
         const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF('l', 'mm', 'a4');
         pdf.addImage(imgData, 'PNG', 10, 10, 277, 150);
-        pdf.save(`Report_${patientID}.pdf`);
-        btn.style.visibility = 'visible';
+        pdf.save(`Audiogram_${patientID}.pdf`);
+        btn.style.display = 'block';
     }
 
+    // Initial load
     init();
 </script>
 </body>
