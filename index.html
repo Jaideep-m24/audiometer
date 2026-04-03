@@ -1,160 +1,144 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Professional Audiometry Screening</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <style>
-        :root { --primary: #00796b; --bg: #f0f2f5; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); padding: 20px; }
-        #reportArea { max-width: 900px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
-        
-        header { text-align: center; border-bottom: 2px solid var(--primary); margin-bottom: 25px; padding-bottom: 10px; }
-        h2 { color: var(--primary); margin: 0; text-transform: uppercase; letter-spacing: 1px; }
-        
-        .controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: #e0f2f1; padding: 15px; border-radius: 8px; }
-        select, .btn-download { padding: 8px 15px; border-radius: 5px; border: 1px solid var(--primary); font-size: 1rem; cursor: pointer; }
-        .btn-download { background: var(--primary); color: white; font-weight: bold; transition: 0.3s; }
-        .btn-download:hover { background: #004d40; }
-        .info { font-weight: bold; color: #555; }
-        
-        #audiogramCanvas { background: #fff; border: 1px solid #ddd; border-radius: 4px; }
-        .footer-note { font-size: 0.85rem; color: #777; margin-top: 15px; font-style: italic; }
-    </style>
-</head>
-<body>
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <driver/dac.h>
+#include <math.h>
 
-<div id="reportArea">
-    <header>
-        <h2>Pure-Tone Audiometry Screening Report</h2>
-    </header>
+// WiFi Credentials
+const char* ssid = "Rohit";
+const char* password = "manchsri";
 
-    <div class="controls">
-        <div>
-            <label for="patientSelect">Patient ID: </label>
-            <select id="patientSelect" onchange="updateDashboard()">
-                <option value="">Loading...</option>
-            </select>
-        </div>
-        <div class="info" id="testTime">Assessment Time: --:--</div>
-        <button class="btn-download" onclick="downloadPDF()">Download PDF</button>
-    </div>
+// Google Apps Script URL
+const char* scriptURL = "https://script.google.com/macros/s/AKfycbyCNx9IAEyHXVptCH7MI4b1_4s6-BTLMDTLJFXgZVvf7qWUgdhKpb464uVEgRxpl8MQ/exec";
 
-    <canvas id="audiogramCanvas"></canvas>
+// Settings
+float frequencies[] = {250, 500, 1000, 2000, 4000, 8000};
+int totalFreq = 6;
+int currentIndex = 0;
+enum Ear { RIGHT, LEFT };
+Ear currentEar = RIGHT;
 
-    <div class="footer-note">
-        * Screening Criteria: 20dB HL = Pass (Heard) | 90dB HL = Refer (Not Heard).<br>
-        * Symbols: Red Circle (○) = Right Ear | Blue Cross (X) = Left Ear.
-    </div>
-</div>
+const int bootButton = 0;
+unsigned long lastClickTime = 0;
+int clickCount = 0;
+const int doubleClickWindow = 600; // Reduced for better responsiveness
 
-<script>
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyCNx9IAEyHXVptCH7MI4b1_4s6-BTLMDTLJFXgZVvf7qWUgdhKpb464uVEgRxpl8MQ/exec?read=true";
-    
-    let allData = [];
-    let chartInstance = null;
+unsigned long lastWebPollTime = 0;
+const int pollInterval = 500; // Check web UI every 500ms
 
-    async function init() {
-        try {
-            const response = await fetch(SCRIPT_URL);
-            allData = await response.json();
-            const patients = [...new Set(allData.map(item => item.patient))].sort();
-            const selector = document.getElementById('patientSelect');
-            selector.innerHTML = "";
-            
-            patients.forEach(pid => {
-                const opt = document.createElement('option');
-                opt.value = pid;
-                opt.textContent = pid;
-                selector.appendChild(opt);
-            });
-            updateDashboard();
-        } catch (e) {
-            console.error("Fetch Error:", e);
+uint8_t sine_table[128];
+float phase_step = 0;
+
+void updateFrequency(float freq) {
+  float periodUs = 1000000.0 / freq;
+  phase_step = periodUs / 128.0;
+  String earName = (currentEar == RIGHT) ? "RIGHT" : "LEFT";
+  Serial.printf("\n[%s EAR] Testing Frequency: %.0f Hz\n", earName.c_str(), freq);
+}
+
+// Moves to the next frequency/ear and saves data
+void processTestStep(String result) {
+  String earLabel = (currentEar == RIGHT) ? "Right" : "Left";
+  
+  // 1. Send data to Google Sheets
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    String url = String(scriptURL) + "?frequency=" + String(frequencies[currentIndex]) + 
+                 "&status=" + result + "&ear=" + earLabel;
+    http.begin(url);
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    int httpCode = http.GET();
+    if (httpCode > 0) Serial.println("Stored to Sheets: " + result);
+    http.end();
+  }
+
+  // 2. Logic to advance frequency
+  currentIndex++;
+  if (currentIndex >= totalFreq) {
+    if (currentEar == RIGHT) {
+      currentEar = LEFT;
+      currentIndex = 0;
+      Serial.println("Switching to LEFT ear in 2 seconds...");
+      delay(2000); 
+    } else {
+      Serial.println("\nAll Assessments Complete!");
+      currentIndex = 0; // Reset or stop
+      dac_output_voltage(DAC_CHANNEL_1, 128);
+      dac_output_voltage(DAC_CHANNEL_2, 128);
+      while(1) { delay(1000); } // Stop execution
+    }
+  }
+  updateFrequency(frequencies[currentIndex]);
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(bootButton, INPUT_PULLUP);
+  
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
+  Serial.println("\nWiFi Connected");
+
+  // Initialize new Patient Session
+  HTTPClient http;
+  http.begin(String(scriptURL) + "?action=nextPatient");
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  http.GET();
+  http.end();
+
+  dac_output_enable(DAC_CHANNEL_1); 
+  dac_output_enable(DAC_CHANNEL_2); 
+
+  for (int i = 0; i < 128; i++) {
+    sine_table[i] = (uint8_t)(127.5 * (1.0 + sin(2.0 * PI * i / 128.0)));
+  }
+  updateFrequency(frequencies[currentIndex]);
+}
+
+void loop() {
+  unsigned long currentTime = millis();
+
+  // --- 1. WEB UI POLLING LOGIC ---
+  if (currentTime - lastWebPollTime > pollInterval) {
+    lastWebPollTime = currentTime;
+    if (WiFi.status() == WL_CONNECTED) {
+      HTTPClient http;
+      http.begin(String(scriptURL) + "?action=checkWebResponse");
+      http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+      int httpCode = http.GET();
+      if (httpCode > 0) {
+        String response = http.getString();
+        if (response == "Heard" || response == "Not_Heard") {
+          Serial.println("Web Action Received: " + response);
+          processTestStep(response);
         }
+      }
+      http.end();
     }
+  }
 
-    function updateDashboard() {
-        const selectedID = document.getElementById('patientSelect').value;
-        const patientData = allData.filter(item => item.patient === selectedID);
-        
-        if (patientData.length > 0) {
-            document.getElementById('testTime').textContent = `Date: ${patientData[0].timestamp || 'N/A'}`;
-        }
+  // --- 2. PHYSICAL BUTTON LOGIC (1 click = Heard, 2 clicks = Not Heard) ---
+  if (digitalRead(bootButton) == LOW) {
+    delay(50); // debounce
+    clickCount++;
+    if (clickCount == 1) lastClickTime = currentTime;
+    while(digitalRead(bootButton) == LOW); // Wait for release
+  }
 
-        const rightEarPoints = patientData
-            .filter(d => d.ear === "Right")
-            .map(d => ({ x: Number(d.frequency), y: d.status === "Heard" ? 20 : 90 }))
-            .sort((a,b) => a.x - b.x);
+  if (clickCount > 0 && (currentTime - lastClickTime > doubleClickWindow || clickCount == 2)) {
+    String result = (clickCount == 1) ? "Heard" : "Not_Heard";
+    processTestStep(result);
+    clickCount = 0; 
+  }
 
-        const leftEarPoints = patientData
-            .filter(d => d.ear === "Left")
-            .map(d => ({ x: Number(d.frequency), y: d.status === "Heard" ? 20 : 90 }))
-            .sort((a,b) => a.x - b.x);
-
-        renderChart(rightEarPoints, leftEarPoints);
+  // --- 3. SINE WAVE GENERATION ---
+  for (int i = 0; i < 128; i++) {
+    if (currentEar == RIGHT) {
+      dac_output_voltage(DAC_CHANNEL_1, sine_table[i]);
+      dac_output_voltage(DAC_CHANNEL_2, 128);
+    } else {
+      dac_output_voltage(DAC_CHANNEL_2, sine_table[i]);
+      dac_output_voltage(DAC_CHANNEL_1, 128);
     }
-
-    function renderChart(rightData, leftData) {
-        const ctx = document.getElementById('audiogramCanvas').getContext('2d');
-        if (chartInstance) chartInstance.destroy();
-        chartInstance = new Chart(ctx, {
-            type: 'line',
-            data: {
-                datasets: [
-                    {
-                        label: 'Right Ear',
-                        data: rightData,
-                        borderColor: 'red',
-                        pointStyle: 'circle',
-                        pointRadius: 7,
-                        showLine: true
-                    },
-                    {
-                        label: 'Left Ear',
-                        data: leftData,
-                        borderColor: 'blue',
-                        pointStyle: 'crossRot',
-                        pointRadius: 9,
-                        showLine: true
-                    }
-                ]
-            },
-            options: {
-                scales: {
-                    x: { type: 'logarithmic', min: 125, max: 8000, title: { display: true, text: 'Frequency (Hz)' } },
-                    y: { reverse: true, min: 0, max: 100, title: { display: true, text: 'Hearing Level (dB HL)' } }
-                }
-            }
-        });
-    }
-
-    async function downloadPDF() {
-        const { jsPDF } = window.jspdf;
-        const element = document.getElementById('reportArea');
-        const patientID = document.getElementById('patientSelect').value;
-        
-        // Hide button during capture
-        document.querySelector('.btn-download').style.display = 'none';
-
-        const canvas = await html2canvas(element);
-        const imgData = canvas.toDataURL('image/png');
-        
-        const pdf = new jsPDF('l', 'mm', 'a4');
-        const imgProps = pdf.getImageProperties(imgData);
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-        
-        pdf.addImage(imgData, 'PNG', 0, 10, pdfWidth, pdfHeight);
-        pdf.save(`Audiometry_Report_${patientID}.pdf`);
-
-        // Show button again
-        document.querySelector('.btn-download').style.display = 'block';
-    }
-
-    init();
-</script>
-</body>
-</html>
+    delayMicroseconds(phase_step);
+  }
+}
