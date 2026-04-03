@@ -4,6 +4,11 @@ const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby2HXHwRWdESL_NDLH8A
 let allData = [];
 let chartInstance = null;
 
+// ✅ WAIT FOR PAGE LOAD
+window.onload = () => {
+    init();
+};
+
 // 🔁 SWITCH TAB
 function switchTab(tabId) {
     document.querySelectorAll('.container').forEach(c => c.classList.remove('active'));
@@ -17,53 +22,68 @@ function switchTab(tabId) {
 
 // 🌐 LOAD DATA
 async function init() {
-    try {
-        const res = await fetch(`${SCRIPT_URL}?read=true&t=${Date.now()}`);
-        const data = await res.json();
+    const selector = document.getElementById('patientSelect');
 
-        if (!Array.isArray(data)) return;
+    try {
+        selector.innerHTML = "<option>Loading...</option>";
+
+        const res = await fetch(`${SCRIPT_URL}?read=true&t=${Date.now()}`);
+
+        if (!res.ok) {
+            selector.innerHTML = "<option>Server Error</option>";
+            console.error("HTTP Error:", res.status);
+            return;
+        }
+
+        const data = await res.json();
+        console.log("DATA:", data);
+
+        if (!Array.isArray(data) || data.length === 0) {
+            selector.innerHTML = "<option>No Data Found</option>";
+            return;
+        }
 
         allData = data;
 
         const patients = [...new Set(allData.map(d => d.patient))].reverse();
-        const selector = document.getElementById('patientSelect');
 
         selector.innerHTML = "";
 
-        if (patients.length === 0) {
-            selector.innerHTML = "<option>No Data</option>";
-            return;
-        }
-
-        patients.forEach(p => {
+        patients.forEach((p, index) => {
             const opt = document.createElement("option");
             opt.value = p;
             opt.textContent = p;
+            if(index === 0) opt.selected = true;
             selector.appendChild(opt);
         });
 
         updateDashboard();
 
     } catch (e) {
-        console.error(e);
+        console.error("FETCH ERROR:", e);
+        selector.innerHTML = "<option>Error Loading</option>";
     }
 }
 
 // 📊 UPDATE DASHBOARD
 function updateDashboard() {
-    const id = document.getElementById('patientSelect').value;
+    const selector = document.getElementById('patientSelect');
+    if (!selector || !selector.value) return;
+
+    const id = selector.value;
     const patientData = allData.filter(d => d.patient === id);
 
-    if (patientData.length > 0) {
-        document.getElementById('testTime').innerText = "Date: " + patientData[0].timestamp;
-    }
+    if (patientData.length === 0) return;
+
+    document.getElementById('testTime').innerText =
+        "Date: " + patientData[0].timestamp;
 
     const formatPoints = (ear) => {
         return patientData
             .filter(d => d.ear === ear)
             .map(d => ({
                 x: Number(d.frequency),
-                y: d.status === "Heard" ? 30 : 80   // improved mapping
+                y: d.status === "Heard" ? 30 : 80
             }))
             .sort((a,b)=>a.x-b.x);
     };
@@ -73,7 +93,11 @@ function updateDashboard() {
 
 // 📈 RENDER CHART
 function renderChart(right, left) {
-    const ctx = document.getElementById('audiogramCanvas').getContext('2d');
+    const canvas = document.getElementById('audiogramCanvas');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+
     if (chartInstance) chartInstance.destroy();
 
     chartInstance = new Chart(ctx, {
@@ -107,24 +131,30 @@ function renderChart(right, left) {
                     type: 'linear',
                     min: 200,
                     max: 9000,
+                    title: {
+                        display: true,
+                        text: "Frequency (Hz)"
+                    },
                     ticks: {
                         callback: val => val + " Hz"
-                    },
-                    title: { display: true, text: "Frequency (Hz)" }
+                    }
                 },
                 y: {
                     reverse: true,
                     min: 0,
                     max: 100,
                     ticks: { stepSize: 10 },
-                    title: { display: true, text: "Hearing Level (dB HL)" }
+                    title: {
+                        display: true,
+                        text: "Hearing Level (dB HL)"
+                    }
                 }
             }
         }
     });
 }
 
-// 🎧 SEND RESPONSE (FIXED)
+// 🎧 SEND RESPONSE
 async function submitResponse(status) {
     const el = document.getElementById('testStatus');
 
@@ -132,18 +162,13 @@ async function submitResponse(status) {
     el.style.color = "#00796b";
 
     try {
-        const res = await fetch(
+        await fetch(
             `${SCRIPT_URL}?action=patientResponse&status=${status}&t=${Date.now()}`,
-            {
-                method: "GET",
-                cache: "no-store"
-            }
+            { method: "GET", cache: "no-store" }
         );
 
-        const txt = await res.text();
-
         el.innerText = "Response recorded ✔";
-        
+
         setTimeout(() => {
             el.innerText = "Listening...";
         }, 1500);
@@ -154,7 +179,7 @@ async function submitResponse(status) {
     }
 }
 
-// 📄 PDF DOWNLOAD (UNCHANGED BUT STABLE)
+// 📄 PDF
 async function downloadPDF() {
     const { jsPDF } = window.jspdf;
     const element = document.getElementById('reportArea');
@@ -168,13 +193,11 @@ async function downloadPDF() {
     pdf.save(`Audiogram_${patientID}.pdf`);
 }
 
-// 🔄 AUTO REFRESH DASHBOARD
+// 🔄 AUTO REFRESH
 setInterval(() => {
-    if (document.getElementById('doctor').classList.contains('active')) {
+    const docTab = document.getElementById('doctor');
+    if (docTab && docTab.classList.contains('active')) {
         init();
     }
 }, 5000);
-
-// 🚀 INITIAL LOAD
-init();
 </script>
